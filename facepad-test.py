@@ -207,7 +207,7 @@ def evaluate_video(vdfile,scfile):
 			# get the frame from video
 			ret, frame = video_capture.read()
 			cv2.imshow('teste', frame)
-			cv2.waitKey(0)
+			cv2.waitKey(10)
 			face_raw = frame
 			#cv2.imshow('image',face_raw)
 			#cv2.waitKey(0)
@@ -237,7 +237,7 @@ myargs = {}
 #isVideo = myargs['-isVideo']
 #vdfile = myargs['-input']
 isVideo = 1
-vdfile = '/home/vareto/GIT/Face Spoofing Methods/ECCV2018-FaceDeSpoofing/Test_video.avi'
+vdfile = './Test_video.avi'
 if vdfile[-4] == '.':
 	scfile = open('./score/'+vdfile[-12:-3]+'score','w')
 else:
