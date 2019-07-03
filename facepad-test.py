@@ -190,7 +190,6 @@ def evaluate_video(vdfile,scfile):
 	# get the video
 	video_capture = cv2.VideoCapture(vdfile)
 	print(video_capture)
-	input()
 	totalframes = video_capture.get(cv2.CAP_PROP_FRAME_COUNT)
 		
 	with tf.compat.v1.Session() as sess:
@@ -206,18 +205,15 @@ def evaluate_video(vdfile,scfile):
 		while(ret):
 			# get the frame from video
 			ret, frame = video_capture.read()
-			cv2.imshow('teste', frame)
-			cv2.waitKey(10)
-			face_raw = frame
-			#cv2.imshow('image',face_raw)
-			#cv2.waitKey(0)
-			#input()
-			# run the facepad
-			start = time.time()
-			sc = sess.run(scores,feed_dict={image : face_raw})
-			# save the score for video frames
-			scfile.write("%.3f\n" % sc)
-			print(sc)
+			if ret:
+				# process image
+				sc = sess.run(scores,feed_dict={image : frame})
+				# show images
+				cv2.imshow('teste', frame)
+				cv2.waitKey(10)
+				# save the score for video frames
+				scfile.write("%.3f\n" % sc)
+				print(sc)
 	return scfile
 
 def getopts(argv,opts):
@@ -237,7 +233,7 @@ myargs = {}
 #isVideo = myargs['-isVideo']
 #vdfile = myargs['-input']
 isVideo = 1
-vdfile = './Test_video.avi'
+vdfile = './attack.avi' # './bona_fide.avi'
 if vdfile[-4] == '.':
 	scfile = open('./score/'+vdfile[-12:-3]+'score','w')
 else:
