@@ -99,7 +99,7 @@ def facePAD_API(image):
 		score = sess.run(_output,feed_dict={_input : image})
 	return score
 
-def evaluate_image(imfile,scfile):
+def evaluate_image_bbox(imfile,scfile):
 	with tf.Session() as sess:
 		# load the facepad model
 		tf.saved_model.loader.load(sess, 
@@ -110,9 +110,6 @@ def evaluate_image(imfile,scfile):
 		
 		# get the image
 		frame = cv2.imread(imfile)
-		print(frame)
-		cv2.imshow('temp', frame)
-		cv2.waitKey(0)
 		# detect faces in the frame. Detected face in faces with (x,y,w,h)
 		gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 		faces = faceCascade.detectMultiScale(
@@ -126,13 +123,13 @@ def evaluate_image(imfile,scfile):
 			faces = [faces[0]] # only process the largest face
 		except:
 			print("No face detected!")
-			sys.exit()
+			#sys.exit()
 		for (x, y, w, h) in faces:
 			# crop face from frame
 			l = max(w,h)
 			face_raw = frame[y:y+l, x:x+l]
 			# run the facepad
-			sc = sess.run(scores,feed_dict={image : face_raw})
+			sc = sess.run(scores,feed_dict={image : frame})
 			# save the score for video frames
 			scfile.write("%.3f\n" % sc)
 	return scfile
@@ -216,6 +213,29 @@ def evaluate_video(vdfile,scfile):
 				print(sc)
 	return scfile
 
+
+def evaluate_image(imfile, scfile, label):
+	with tf.Session() as sess:
+		# load the facepad model
+		tf.saved_model.loader.load(sess, 
+					[tf.saved_model.tag_constants.SERVING], 
+					export_dir)
+		image  = tf.get_default_graph().get_tensor_by_name(inputname)
+		scores = tf.get_default_graph().get_tensor_by_name(outputname)
+		
+		# get the image
+		frame = cv2.imread(imfile)
+		try:
+			# run the facepad
+			sc = sess.run(scores,feed_dict={image : frame})
+			# save the score for video frames
+			#scfile.write("%.3f\n" % sc)
+			scfile.write("{} {} \n".format(label, sc))
+		except:
+			print("Empty image file!")
+			#sys.exit()
+	return scfile
+
 def getopts(argv,opts):
 	while argv:  # While there are arguments left to parse...
 		if argv[0][0] == '-':  # Found a "-name value" pair.
@@ -232,34 +252,30 @@ def getopts(argv,opts):
 
 import json
 
-file_name = './SWAX Dataset/Protocol-01-test.json'
+file_name = './SWAX_Dataset/Protocol-04-test.json'
 
-FP_list = list()
-FN_list = list()
-with open(file_name) as infile:
-	protocol_file = json.load(infile)
-	for protocol in protocol_file:
-		FP_rate = 0
+with tf.Session() as sess:
+	# load the facepad model
+	tf.saved_model.loader.load(sess, 
+				[tf.saved_model.tag_constants.SERVING], 
+				export_dir)
+	image  = tf.get_default_graph().get_tensor_by_name(inputname)
+	scores = tf.get_default_graph().get_tensor_by_name(outputname)
 
+	scfile = open('./score/swax.score','w')
 
-# myargs = {}
-# #myargs = getopts(sys.argv,myargs)        
-# #isVideo = myargs['-isVideo']
-# #vdfile = myargs['-input']
-# isVideo = 1
-# vdfile = './attack.avi' # './bona_fide.avi'
-# if vdfile[-4] == '.':
-# 	scfile = open('./score/'+vdfile[-12:-3]+'score','w')
-# else:
-# 	scfile = open('./score/'+vdfile[-12:-4]+'score','w')
-
-# print(vdfile)
-# print('Processing...')
-
-# if isVideo:
-# 	scfile = evaluate_video(vdfile,scfile)  
-# else:
-# 	scfile = evaluate_image(vdfile,scfile)  
-	
-# scfile.close()
-# print('Done!')
+	FP_list = list()
+	FN_list = list()
+	with open(file_name) as infile:
+		protocol_file = json.load(infile)
+		for (index, protocol) in enumerate(protocol_file):
+			print('>> PROTOCOL {}'.format(index))
+			for (img_path, img_label)  in protocol:
+				# print(os.path.join('SWAX_Dataset', img_path), os.path.isfile(os.path.join('SWAX_Dataset', img_path)))
+				img_name = os.path.join('SWAX_Dataset', img_path)
+				img_file = cv2.imread(img_name, cv2.IMREAD_COLOR)
+				img_scre = sess.run(scores, feed_dict={image : img_file})
+				scfile.write("{} {} {} \n".format(img_name, img_label, img_scre))
+				print(img_name, img_label, img_scre)
+				#cv2.imshow('test', img_file)
+				#cv2.waitKey(10)
