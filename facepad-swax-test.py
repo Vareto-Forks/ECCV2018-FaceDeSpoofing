@@ -249,10 +249,8 @@ def getopts(argv,opts):
 	return opts
 
 
-
+from sklearn.metrics import precision_recall_curve, auc
 import json
-
-file_name = './SWAX_Dataset/Protocol-04-test.json'
 
 with tf.Session() as sess:
 	# load the facepad model
@@ -262,20 +260,65 @@ with tf.Session() as sess:
 	image  = tf.get_default_graph().get_tensor_by_name(inputname)
 	scores = tf.get_default_graph().get_tensor_by_name(outputname)
 
-	scfile = open('./score/swax.score','w')
+	valid_file_name = './SWAX_Dataset/Protocol-04-valid.json'
+	test_file_name = './SWAX_Dataset/Protocol-04-test.json'
 
-	FP_list = list()
-	FN_list = list()
-	with open(file_name) as infile:
+	sc_valid_file = open('./score/swax_valid.score','w')
+	sc_test_file  = open('./score/swax_probe.score','w')
+
+	sc_valid_file.write(valid_file_name + '\n')
+	sc_probe_file.write( test_file_name + '\n')
+
+	threshold_list = list()
+	with open(valid_file_name) as infile:
 		protocol_file = json.load(infile)
-		for (index, protocol) in enumerate(protocol_file):
-			print('>> PROTOCOL {}'.format(index))
-			for (img_path, img_label)  in protocol:
-				# print(os.path.join('SWAX_Dataset', img_path), os.path.isfile(os.path.join('SWAX_Dataset', img_path)))
+		for (index, fold) in enumerate(protocol_file):
+			print('>> FOLD {}'.format(index))
+			scfile.write('>> FOLD {}\n'.format(index))
+			validation_labels = list()
+			validation_scores = list()
+			for (img_path, img_label) in fold:
+				# Evaluate validation image
 				img_name = os.path.join('SWAX_Dataset', img_path)
 				img_file = cv2.imread(img_name, cv2.IMREAD_COLOR)
 				img_scre = sess.run(scores, feed_dict={image : img_file})
-				scfile.write("{} {} {} \n".format(img_name, img_label, img_scre))
+				# Keep validation results record
+				validation_labels.append(-1) if img_label == 'real' else validation_labels.append(+1)
+				validation_scores.append(img_scre)
+				# Notify user of prediction progress
+				scfile.write("{} {} {}\n".format(img_name, img_label, img_scre))
 				print(img_name, img_label, img_scre)
-				#cv2.imshow('test', img_file)
-				#cv2.waitKey(10)
+			# Obtain threshold
+			precision, recall, threshold = precision_recall_curve(validation_labels, validation_scores)
+			fmeasure = [(thr, (2 * (pre * rec) / (pre + rec))) for pre, rec, thr in zip(precision[:-1], recall[:-1], threshold)]
+			fmeasure.sort(key=lambda tup:tup[1], reverse=True)
+			threshold_list.append(fmeasure[0][0])
+
+	error_list = list()
+	with open(test_file_name) as infile:
+		protocol_file = json.load(infile)
+		for (index, fold) in enumerate(protocol_file):
+			threshold_value = threshold_list[index]
+			print('>> FOLD {} - Threshold = {}'.format(index, threshold_value))
+			scfile.write('>> FOLD {}\n'.format(index))
+			testing_labels = list()
+			testing_scores = list()			
+			counter_dict = {img_label:0.0 for (img_path, img_label) in fold}
+			mistake_dict = {img_label:0.0 for (img_path, img_label) in fold}
+			for (img_path, img_label) in fold:
+				# Evaluate testing image
+				img_name = os.path.join('SWAX_Dataset', img_path)
+				img_file = cv2.imread(img_name, cv2.IMREAD_COLOR)
+				img_scre = sess.run(scores, feed_dict={image : img_file})
+				# Keep testing results record
+				testing_labels.append(-1) if img_label == 'real' else validation_labels.append(+1)
+				testing_scores.append(img_scre)
+				pred_label = 'real' if img_scre <= threshold_value else 'wax'
+				counter_dict[img_label] += 1
+				if pred_label != img_label: 
+					mistake_dict[img_label] += 1
+				# Notify user of prediction progress
+				scfile.write("{} {} {}\n".format(img_name, img_label, img_scre))
+				print(img_name, img_label, img_scre)
+			# Generate APCER, BPCER
+			error_list.append({label:(mistake_dict[label]/counter_dict[label]) for label in counter_dict.keys()})
