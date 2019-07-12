@@ -245,12 +245,16 @@ def getopts(argv,opts):
 				print('-isVideo : True/False, indicate if it is a video. Default as False.')
 			sys.exit()
 			opts[argv[0]] = argv[1]  # Add key and value to the dictionary.
-		argv = argv[1:]  # Reduce the argument list by copying it starting from index 1.
+		argv = argv[1:]  # Reduce the argument list by copying it starting from outer 1.
 	return opts
 
+import json
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 from sklearn.metrics import precision_recall_curve, auc
-import json
+from myPlots import MyPlots
 
 with tf.Session() as sess:
 	# load the facepad model
@@ -264,7 +268,7 @@ with tf.Session() as sess:
 	test_file_name = './SWAX_Dataset/Protocol-04-test.json'
 
 	sc_valid_file = open('./score/swax_valid.score','w')
-	sc_test_file  = open('./score/swax_probe.score','w')
+	sc_probe_file  = open('./score/swax_probe.score','w')
 
 	sc_valid_file.write(valid_file_name + '\n')
 	sc_probe_file.write( test_file_name + '\n')
@@ -272,9 +276,9 @@ with tf.Session() as sess:
 	threshold_list = list()
 	with open(valid_file_name) as infile:
 		protocol_file = json.load(infile)
-		for (index, fold) in enumerate(protocol_file):
-			print('>> FOLD {}'.format(index))
-			scfile.write('>> FOLD {}\n'.format(index))
+		for (outer, fold) in enumerate(protocol_file):
+			print('>> FOLD {}'.format(outer))
+			sc_valid_file.write('>> FOLD {}\n'.format(outer))
 			validation_labels = list()
 			validation_scores = list()
 			for (img_path, img_label) in fold:
@@ -286,7 +290,7 @@ with tf.Session() as sess:
 				validation_labels.append(-1) if img_label == 'real' else validation_labels.append(+1)
 				validation_scores.append(img_scre)
 				# Notify user of prediction progress
-				scfile.write("{} {} {}\n".format(img_name, img_label, img_scre))
+				sc_valid_file.write("{} {} {}\n".format(img_name, img_label, img_scre))
 				print(img_name, img_label, img_scre)
 			# Obtain threshold
 			precision, recall, threshold = precision_recall_curve(validation_labels, validation_scores)
@@ -294,31 +298,47 @@ with tf.Session() as sess:
 			fmeasure.sort(key=lambda tup:tup[1], reverse=True)
 			threshold_list.append(fmeasure[0][0])
 
+
 	error_list = list()
+	labels_list = list()
+	scores_list = list()
 	with open(test_file_name) as infile:
 		protocol_file = json.load(infile)
-		for (index, fold) in enumerate(protocol_file):
-			threshold_value = threshold_list[index]
-			print('>> FOLD {} - Threshold = {}'.format(index, threshold_value))
-			scfile.write('>> FOLD {}\n'.format(index))
+		for (outer, fold) in enumerate(protocol_file):
+			#threshold_value = threshold_list[outer]
+			threshold_value = 0.25
+			print('>> FOLD {} - Threshold = {}'.format(outer, threshold_value))
+			sc_probe_file.write('>> FOLD {}\n'.format(outer))
 			testing_labels = list()
 			testing_scores = list()			
 			counter_dict = {img_label:0.0 for (img_path, img_label) in fold}
 			mistake_dict = {img_label:0.0 for (img_path, img_label) in fold}
-			for (img_path, img_label) in fold:
+			for inner, (img_path, img_label) in enumerate(fold):
 				# Evaluate testing image
 				img_name = os.path.join('SWAX_Dataset', img_path)
 				img_file = cv2.imread(img_name, cv2.IMREAD_COLOR)
 				img_scre = sess.run(scores, feed_dict={image : img_file})
 				# Keep testing results record
-				testing_labels.append(-1) if img_label == 'real' else validation_labels.append(+1)
+				testing_labels.append(-1) if img_label == 'real' else testing_labels.append(+1)
 				testing_scores.append(img_scre)
 				pred_label = 'real' if img_scre <= threshold_value else 'wax'
-				counter_dict[img_label] += 1
 				if pred_label != img_label: 
 					mistake_dict[img_label] += 1
+				counter_dict[img_label] += 1
 				# Notify user of prediction progress
-				scfile.write("{} {} {}\n".format(img_name, img_label, img_scre))
-				print(img_name, img_label, img_scre)
-			# Generate APCER, BPCER
+				sc_probe_file.write("{} {} {} {} {} {} {}\n".format(inner, counter_dict, mistake_dict, img_name, img_scre, img_label, pred_label))
+				print(inner, counter_dict, mistake_dict, img_name, img_scre, img_label, pred_label)
+			# Keep record of APCER, BPCER and ROC
 			error_list.append({label:(mistake_dict[label]/counter_dict[label]) for label in counter_dict.keys()})
+			labels_list.append(testing_labels)
+			scores_list.append(testing_scores)
+			with open('./score/swax_acer.json','w') as outfile:
+				json.dump(error_list, outfile) 
+			with open('./score/swax_roc.json','w') as outfile:
+				json.dump({'labels':[str(label) for label in labels_list], 'scores':[str(score) for score in scores_list]}, outfile) 
+			# Generate ROC Curve
+			plt.figure()
+			roc_data = MyPlots.merge_roc_curves(labels_list, scores_list, name='ROC Average')
+			MyPlots.plt_roc_curves([roc_data,])
+			plt.savefig('./score/swax_roc.pdf')
+			plt.close()
