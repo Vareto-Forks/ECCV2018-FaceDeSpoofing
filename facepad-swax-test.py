@@ -281,7 +281,7 @@ with tf.Session() as sess:
 			sc_valid_file.write('>> FOLD {}\n'.format(outer))
 			validation_labels = list()
 			validation_scores = list()
-			for (img_path, img_label) in fold:
+			for inner, (img_path, img_label) in enumerate(fold):
 				# Evaluate validation image
 				img_name = os.path.join('SWAX_Dataset', img_path)
 				img_file = cv2.imread(img_name, cv2.IMREAD_COLOR)
@@ -290,8 +290,8 @@ with tf.Session() as sess:
 				validation_labels.append(-1) if img_label == 'real' else validation_labels.append(+1)
 				validation_scores.append(img_scre)
 				# Notify user of prediction progress
-				sc_valid_file.write("{} {} {}\n".format(img_name, img_label, img_scre))
-				print(img_name, img_label, img_scre)
+				sc_valid_file.write("{} {} {} {}\n".format(inner, img_name, img_label, img_scre))
+				print(inner, img_name, img_label, img_scre)
 			# Obtain threshold
 			precision, recall, threshold = precision_recall_curve(validation_labels, validation_scores)
 			fmeasure = [(thr, (2 * (pre * rec) / (pre + rec))) for pre, rec, thr in zip(precision[:-1], recall[:-1], threshold)]
@@ -305,8 +305,7 @@ with tf.Session() as sess:
 	with open(test_file_name) as infile:
 		protocol_file = json.load(infile)
 		for (outer, fold) in enumerate(protocol_file):
-			#threshold_value = threshold_list[outer]
-			threshold_value = 0.25
+			threshold_value = threshold_list[outer]
 			print('>> FOLD {} - Threshold = {}'.format(outer, threshold_value))
 			sc_probe_file.write('>> FOLD {}\n'.format(outer))
 			testing_labels = list()
