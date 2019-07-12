@@ -296,7 +296,10 @@ with tf.Session() as sess:
 			precision, recall, threshold = precision_recall_curve(validation_labels, validation_scores)
 			fmeasure = [(thr, (2 * (pre * rec) / (pre + rec))) for pre, rec, thr in zip(precision[:-1], recall[:-1], threshold)]
 			fmeasure.sort(key=lambda tup:tup[1], reverse=True)
-			threshold_list.append(fmeasure[0][0])
+			threshold_list.append(str(fmeasure[0][0]))
+			with open('./score/swax_thresh.json','w') as outfile:
+				json.dump(threshold_list, outfile) 
+			print('-> THRESHOLD {}'.format(fmeasure[0][0]))
 
 
 	error_list = list()
